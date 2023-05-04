@@ -1,0 +1,113 @@
+CONFIGURE INTERFACES
+ls /sys/class/net
+sudo ip addr add 10.0.1.1/24 dev ens7
+sudo ip link set dev ens7 up
+
+CONFIGURE DOCKER
+sudo docker ps
+sudo docker exec -it fabric_p4 bash
+
+CONFIGURE P4 SWITCH
+ps axguw | grep simple_switch
+sudo killall -s 9 simple_switch
+p4c --p4runtime-files build/project.txt --target bmv2 --arch v1model -o build project.p4
+p4c --p4runtime-files build_basic/basic.txt --target bmv2 --arch v1model -o build_basic basic.p4
+simple_switch build/project.json
+simple_switch build_basic/basic.json
+
+PACKETS
+tcpdump -i <ens iface>
+
+SIMPLE SWITCH COMMANDS
+simple_switch_CLI (or) ./tools/behavioral-model/tools/runtime_CLI.py
+show_ports
+show_tables
+table_dump <table>
+port_add <iface> <port>
+port_remove <port>
+table_add <table name> <action name> <match fields> => <action parameters>
+mirroring_add <id> <port>
+
+SCAPY
+a = sniff()
+a.show()
+hexdump(a[i])
+
+
+
+
+
+The following is code to set the tables and ports of the switches using the simple_switch_CLI
+It seems FABRIC is not always consistent with which interfaces are assigned to which links, so
+it may need to be rewritten upon creating a new slice
+
+SWITCH 1:
+project.p4:
+port_add ens8 1
+port_add ens7 2
+port_add ens9 3
+table_add ipv4_lpm ipv4_forward 10.0.1.1/32 => 1 20.0.1.1
+table_add ipv4_lpm ipv4_forward 10.0.2.2/32 => 2 20.0.1.1
+table_add ipv4_lpm ipv4_forward 10.0.3.3/32 => 3 20.0.1.1
+table_add emission_src emission_src_match 20.0.1.1 => 
+table_add emission_dst emission_forward 20.0.2.2 => 2
+table_add emission_dst emission_forward 20.0.3.3 => 3
+table_add emission_dst emission_forward 10.0.1.1 => 1
+mirroring_add 500 1
+
+
+basic.p4:
+port_add ens8 1
+port_add ens7 2
+port_add ens9 3
+table_add ipv4_lpm ipv4_forward 10.0.1.1/32 => 1
+table_add ipv4_lpm ipv4_forward 10.0.2.2/32 => 2
+table_add ipv4_lpm ipv4_forward 10.0.3.3/32 => 3
+
+
+
+
+SWITCH 2:
+project.p4:
+port_add ens8 1
+port_add ens7 2
+table_add ipv4_lpm ipv4_forward 10.0.1.1/32 => 2 20.0.2.2
+table_add ipv4_lpm ipv4_forward 10.0.2.2/32 => 1 20.0.2.2
+table_add ipv4_lpm ipv4_forward 10.0.3.3/32 => 2 20.0.2.2
+table_add emission_src emission_src_match 20.0.2.2 => 
+table_add emission_dst emission_forward 20.0.1.1 => 2
+table_add emission_dst emission_forward 10.0.2.2 => 1
+mirroring_add 500 1
+
+
+basic.p4:
+port_add ens8 1
+port_add ens7 2
+table_add ipv4_lpm ipv4_forward 10.0.1.1/32 => 2
+table_add ipv4_lpm ipv4_forward 10.0.2.2/32 => 1
+table_add ipv4_lpm ipv4_forward 10.0.3.3/32 => 2
+
+
+
+
+SWITCH 3:
+project.p4:
+port_add ens8 1
+port_add ens7 2
+table_add ipv4_lpm ipv4_forward 10.0.1.1/32 => 2 20.0.3.3
+table_add ipv4_lpm ipv4_forward 10.0.2.2/32 => 2 20.0.3.3
+table_add ipv4_lpm ipv4_forward 10.0.3.3/32 => 1 20.0.3.3
+table_add emission_src emission_src_match 20.0.3.3 => 
+table_add emission_dst emission_forward 20.0.1.1 => 2
+table_add emission_dst emission_forward 10.0.3.3 => 1
+mirroring_add 500 1
+
+
+
+basic.p4:
+port_add ens8 1
+port_add ens7 2
+table_add ipv4_lpm ipv4_forward 10.0.1.1/32 => 2
+table_add ipv4_lpm ipv4_forward 10.0.2.2/32 => 2
+table_add ipv4_lpm ipv4_forward 10.0.3.3/32 => 1
+
